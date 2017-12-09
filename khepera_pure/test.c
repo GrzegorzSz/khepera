@@ -81,6 +81,38 @@ int main(){
 	printf("  voltage           :  %4.0f mV \n",(Buffer[10] | Buffer[11]<<8)*9.76);
 	printf("  charger           :  %s\n",kh4_battery_charge(dsPic)?"plugged":"unplugged");
 
+	//------RGB LED example------------------------------------------------------
+	printf("\nRGB LED example\n");
+
+	for(i = 0; i<0x20; i++){		//0x20 => 50% brightness
+		kh4_SetRGBLeds(0, i, 0, i, 0, 0, 0, 0, i, dsPic);
+		usleep(20000);
+	}
+	kh4_SetRGBLeds(0, 0, 0, 0, 0, 0, 0, 0, 0, dsPic);		//stop LED
+
+	//------ motor example -----------------------------------------------------
+	motspeed = (long)(42.0/KH4_SPEED_TO_MM_S);
+	kh4_SetMode(kh4RegSpeed, dsPic);
+	kh4_set_speed(motspeed, -motspeed, dsPic);
+	printf("\nRotating 5s at %.1f mm/s (pulse speed %ld) with speed only\n", 42.0, motspeed);
+	sleep(5);
+	kh4_set_speed(0, 0, dsPic);
+
+	printf("Moving backward and forward 2s\n");
+	kh4_set_speed(-motspeed, -motspeed, dsPic);
+	sleep(2);
+	kh4_set_speed(motspeed, motspeed, dsPic);
+	sleep(2);
+	kh4_set_speed(0, 0, dsPic);
+	kh4_SetMode(kh4RegIdle, dsPic);
+	kh4_ResetEncoders(dsPic);
+
+	//na koniec upewnijmy się, że silniki nie pracują
+	//a diody nie świecą:
+	kh4_set_speed(0, 0, dsPic);
+	kh4_SetRGBLeds(0, 0, 0, 0, 0, 0, 0, 0, 0, dsPic);
+	kh4_SetMode(kh4RegIdle, dsPic);		//w tym trybie silniki nie pobierają prądu
 
 
+	return 0;
 }
