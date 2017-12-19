@@ -61,212 +61,260 @@ long long timeval_diff(struct timeval *difference,
 
 } /* timeval_diff() */
 
-// TODO: adjust function drive_robot to sockets
-int drive_robot()
+// TODO: adjust function drive_robot to sockets, remember timestamps
+int drive_robot(int* read_size, int* client_sock, char* client_message)
 {
 	int out=0,speed=DEFAULT_SPEED*4,vsl,vsr,anymove=0;
 	char c;
 	struct timeval startt,endt;
 
+	printf("inside drive_robot fun\n");
 
-	//kb_clrscr(); // erase screen
-
-	printf("Drive the robot with the keyboard:\n  's' for stop\n  arrows (UP, DOWN, LEFT , RIGHT) for direction\n  PAGE UP/DOWN for changing speed  by small increments\n  Home/End for changing speed by big increments\n  'q' for going back to main menu\n");
-
-	printf("\ndefault parameters:\n  robot speed %d  (%5.1f mm/s)  (min %d, max %d)\n\n",DEFAULT_SPEED,DEFAULT_SPEED*KH4_SPEED_TO_MM_S,MIN_SPEED,MAX_SPEED);
-	kb_change_term_mode(1); // change terminal mode for kbhit and getchar to return immediately
-	kh4_SetMode(kh4RegSpeed, dsPic);
-	gettimeofday(&startt,0x0);
-
-	// loop until 'q' is pushed
-	while(!out)
+	while( (*read_size = recv(*client_sock , client_message , 2000 , 0)) > 0 )
 	{
-		if(kb_kbhit())
-		{
-			c = getchar();
+		printf("Srv rcv: [%d]\n", client_message);
+		//Send the message back to client
+		send(*client_sock , client_message , strlen(client_message)+1 , 0);
+		//write(client_sock , client_message , strlen(client_message));
+		//        for(i = 0; i < strlen(client_message); i++){
+		//        	client_message[i] = '\0';
+		//        }
+		//write(client_sock , client_message , strlen(client_message));
+		c = client_message[0];
+		switch (c){
+		case 65:		//Up arrow
+			printf("\033[1`\033[KYou hit Up arrow\n");
+			//kh4_set_speed(speed, speed, dsPic);
+			//anymove = 1;
+			break;
+		case 66: // DOWN arrow
+			printf("\033[1`\033[KYou hit Down arrow");
+//			kh4_set_speed(-speed ,-speed,dsPic  );
+//			anymove=1;
+			break;
+		case 68: // LEFT arrow
+			printf("\033[1`\033[KYou hit Left arrow");
+//			if (speed > ROT_SPEED_HIGH_TRESH) // at high speed, rotate too fast
+//				kh4_set_speed(-speed*ROTATE_HIGH_SPEED_FACT ,speed*ROTATE_HIGH_SPEED_FACT ,dsPic );
+//			else
+//				kh4_set_speed(-speed*ROTATE_LOW_SPEED_FACT ,speed*ROTATE_LOW_SPEED_FACT ,dsPic );
+//			anymove=1;
+			break;
 
-
-			// get special keys
-			if (c == 27)
-			{
-
-				if (c = getchar() == 91) // escape with [
-				{
-					c = getchar();
-
-					switch(c)
-					{
-					case 65: // UP arrow = forward
-						kh4_set_speed(speed ,speed,dsPic );
-						anymove=1;
-						break;
-					case 66: // DOWN arrow = backward
-						kh4_set_speed(-speed ,-speed,dsPic  );
-						anymove=1;
-						break;
-
-					case 68: // LEFT arrow = left
-						if (speed > ROT_SPEED_HIGH_TRESH) // at high speed, rotate too fast
-							kh4_set_speed(-speed*ROTATE_HIGH_SPEED_FACT ,speed*ROTATE_HIGH_SPEED_FACT ,dsPic );
-						else
-							kh4_set_speed(-speed*ROTATE_LOW_SPEED_FACT ,speed*ROTATE_LOW_SPEED_FACT ,dsPic );
-						anymove=1;
-						break;
-
-					case 67: // RIGHT arrow = right
-						if (speed > ROT_SPEED_HIGH_TRESH) // at high speed, rotate too fast
-							kh4_set_speed(speed*ROTATE_HIGH_SPEED_FACT ,-speed*ROTATE_HIGH_SPEED_FACT ,dsPic );
-						else
-							kh4_set_speed(speed*ROTATE_LOW_SPEED_FACT ,-speed*ROTATE_LOW_SPEED_FACT ,dsPic );
-						anymove=1;
-						break;
-
-					case 53: // PAGE UP  = speed up
-						speed+=SPEED_FACTOR;
-						if (speed>MAX_SPEED)
-						{
-							speed=MAX_SPEED;
-						};
-						c = getchar(); // get last character
-
-						kh4_get_speed(&vsl,&vsr,dsPic );
-						kh4_set_speed(SIGN(vsl)*speed ,SIGN(vsr)*speed ,dsPic ); // set new speed, keeping direction with sign
-						printf("\033[1`\033[Krobot speed: %d (%5.1f mm/s)",speed,speed*KH4_SPEED_TO_MM_S); // move cursor to first column, erase line and print info
-						fflush(stdout); // make the display refresh
-						anymove=1;
-						break;
-
-					case 54: // PAGE DOWN = speed down
-						speed-=SPEED_FACTOR;
-						if (speed<MIN_SPEED)
-						{
-							speed=MIN_SPEED;
-						};
-						c = getchar(); // get last character
-
-						kh4_get_speed(&vsl,&vsr,dsPic );
-						kh4_set_speed(SIGN(vsl)*speed ,SIGN(vsr)*speed,dsPic  ); // set new speed, keeping direction with sign
-						printf("\033[1`\033[Krobot speed: %d (%5.1f mm/s)",speed,speed*KH4_SPEED_TO_MM_S); // move cursor to first column, erase line and print info
-						fflush(stdout); // make the display refresh
-						anymove=1;
-						break;
-
-					case 36: // Home  = speed up
-						speed+=BIG_SPEED_FACTOR;
-						if (speed>MAX_SPEED)
-						{
-							speed=MAX_SPEED;
-						};
-						//c = getchar(); // get last character
-
-						kh4_get_speed(&vsl,&vsr,dsPic );
-						kh4_set_speed(SIGN(vsl)*speed ,SIGN(vsr)*speed ,dsPic ); // set new speed, keeping direction with sign
-						printf("\033[1`\033[Krobot speed: %d (%5.1f mm/s)",speed,speed*KH4_SPEED_TO_MM_S); // move cursor to first column, erase line and print info
-						fflush(stdout); // make the display refresh
-						anymove=1;
-						break;
-
-					case 35: // End = speed down
-						speed-=BIG_SPEED_FACTOR;
-						if (speed<MIN_SPEED)
-						{
-							speed=MIN_SPEED;
-						};
-						//c = getchar(); // get last character
-
-						kh4_get_speed(&vsl,&vsr,dsPic );
-						kh4_set_speed(SIGN(vsl)*speed ,SIGN(vsr)*speed,dsPic  ); // set new speed, keeping direction with sign
-						printf("\033[1`\033[Krobot speed: %d (%5.1f mm/s)",speed,speed*KH4_SPEED_TO_MM_S); // move cursor to first column, erase line and print info
-						fflush(stdout); // make the display refresh
-						anymove=1;
-						break;
-
-
-					default:
-						break;
-					} // switch(c)
-				} // escape with [
-				else
-				{ // other special key code
-
-					c = getchar();
-
-					switch(c){
-
-					case 72: // Home  = speed up
-						speed+=BIG_SPEED_FACTOR;
-						if (speed>MAX_SPEED)
-						{
-							speed=MAX_SPEED;
-						};
-						//c = getchar(); // get last character
-
-						kh4_get_speed(&vsl,&vsr,dsPic );
-						kh4_set_speed(SIGN(vsl)*speed ,SIGN(vsr)*speed ,dsPic ); // set new speed, keeping direction with sign
-						printf("\033[1`\033[Krobot speed: %d (%5.1f mm/s)",speed,speed*KH4_SPEED_TO_MM_S); // move cursor to first column, erase line and print info
-						fflush(stdout); // make the display refresh
-						anymove=1;
-						break;
-
-					case 70: // End = speed down
-						speed-=BIG_SPEED_FACTOR;
-						if (speed<MIN_SPEED)
-						{
-							speed=MIN_SPEED;
-						};
-						//c = getchar(); // get last character
-
-						kh4_get_speed(&vsl,&vsr,dsPic );
-						kh4_set_speed(SIGN(vsl)*speed ,SIGN(vsr)*speed,dsPic  ); // set new speed, keeping direction with sign
-						printf("\033[1`\033[Krobot speed: %d (%5.1f mm/s)",speed,speed*KH4_SPEED_TO_MM_S); // move cursor to first column, erase line and print info
-						fflush(stdout); // make the display refresh
-						anymove=1;
-						break;
-
-					default:
-						break	;
-
-					}
-
-				} // ether special key code
-
-
-			} // if (c== '\027')
-			else
-			{
-				switch(c)
-				{
-				case 'q': // quit to main menu
-					out=1;
-					break;
-				case 's': // stop motor
-					kh4_set_speed(0,0,dsPic);
-					break;
-
-				default:
-					break;
-				}
-			}
-
-			gettimeofday(&startt,0x0);
-		} else
-		{
-			gettimeofday(&endt,0x0);;
-			// stop when no key is pushed after some time
-
-			if (anymove &&  (timeval_diff(NULL,&endt,&startt)>STOP_TIME))
-			{
-				kh4_set_speed(0 ,0,dsPic );
-				anymove=0;
-			}
+		case 67: // RIGHT arrow = right
+			printf("\033[1`\033[You hit Right arrow");
+//			if (speed > ROT_SPEED_HIGH_TRESH) // at high speed, rotate too fast
+//				kh4_set_speed(speed*ROTATE_HIGH_SPEED_FACT ,-speed*ROTATE_HIGH_SPEED_FACT ,dsPic );
+//			else
+//				kh4_set_speed(speed*ROTATE_LOW_SPEED_FACT ,-speed*ROTATE_LOW_SPEED_FACT ,dsPic );
+//			anymove=1;
+			break;
+		default:
+			break;
 		}
-		usleep(10000); // wait some ms
-	} // while
-
-	kb_change_term_mode(0); // switch to normal key input mode
-	kh4_set_speed(0,0,dsPic );	 // stop robot
-	kh4_SetMode(kh4RegIdle,dsPic );
+	}
+	printf("\n");
 	return 0;
+
+//
+//	//kb_clrscr(); // erase screen
+//
+//	printf("Drive the robot with the keyboard:\n  's' for stop\n  arrows (UP, DOWN, LEFT , RIGHT) for direction\n  PAGE UP/DOWN for changing speed  by small increments\n  Home/End for changing speed by big increments\n  'q' for going back to main menu\n");
+//
+//	printf("\ndefault parameters:\n  robot speed %d  (%5.1f mm/s)  (min %d, max %d)\n\n",DEFAULT_SPEED,DEFAULT_SPEED*KH4_SPEED_TO_MM_S,MIN_SPEED,MAX_SPEED);
+//	kb_change_term_mode(1); // change terminal mode for kbhit and getchar to return immediately
+//	kh4_SetMode(kh4RegSpeed, dsPic);
+//	gettimeofday(&startt,0x0);
+//
+//	// loop until 'q' is pushed
+//	while(!out)
+//	{
+//		if(kb_kbhit())
+//		{
+//			c = getchar();
+//
+//
+//			// get special keys
+//			if (c == 27)
+//			{
+//
+//				if (c = getchar() == 91) // escape with [
+//				{
+//					c = getchar();
+//
+//					switch(c)
+//					{
+//					case 65: // UP arrow = forward
+//						kh4_set_speed(speed ,speed,dsPic );
+//						anymove=1;
+//						break;
+//					case 66: // DOWN arrow = backward
+//						kh4_set_speed(-speed ,-speed,dsPic  );
+//						anymove=1;
+//						break;
+//
+//					case 68: // LEFT arrow = left
+//						if (speed > ROT_SPEED_HIGH_TRESH) // at high speed, rotate too fast
+//							kh4_set_speed(-speed*ROTATE_HIGH_SPEED_FACT ,speed*ROTATE_HIGH_SPEED_FACT ,dsPic );
+//						else
+//							kh4_set_speed(-speed*ROTATE_LOW_SPEED_FACT ,speed*ROTATE_LOW_SPEED_FACT ,dsPic );
+//						anymove=1;
+//						break;
+//
+//					case 67: // RIGHT arrow = right
+//						if (speed > ROT_SPEED_HIGH_TRESH) // at high speed, rotate too fast
+//							kh4_set_speed(speed*ROTATE_HIGH_SPEED_FACT ,-speed*ROTATE_HIGH_SPEED_FACT ,dsPic );
+//						else
+//							kh4_set_speed(speed*ROTATE_LOW_SPEED_FACT ,-speed*ROTATE_LOW_SPEED_FACT ,dsPic );
+//						anymove=1;
+//						break;
+//
+//					case 53: // PAGE UP  = speed up
+//						speed+=SPEED_FACTOR;
+//						if (speed>MAX_SPEED)
+//						{
+//							speed=MAX_SPEED;
+//						};
+//						c = getchar(); // get last character
+//
+//						kh4_get_speed(&vsl,&vsr,dsPic );
+//						kh4_set_speed(SIGN(vsl)*speed ,SIGN(vsr)*speed ,dsPic ); // set new speed, keeping direction with sign
+//						printf("\033[1`\033[Krobot speed: %d (%5.1f mm/s)",speed,speed*KH4_SPEED_TO_MM_S); // move cursor to first column, erase line and print info
+//						fflush(stdout); // make the display refresh
+//						anymove=1;
+//						break;
+//
+//					case 54: // PAGE DOWN = speed down
+//						speed-=SPEED_FACTOR;
+//						if (speed<MIN_SPEED)
+//						{
+//							speed=MIN_SPEED;
+//						};
+//						c = getchar(); // get last character
+//
+//						kh4_get_speed(&vsl,&vsr,dsPic );
+//						kh4_set_speed(SIGN(vsl)*speed ,SIGN(vsr)*speed,dsPic  ); // set new speed, keeping direction with sign
+//						printf("\033[1`\033[Krobot speed: %d (%5.1f mm/s)",speed,speed*KH4_SPEED_TO_MM_S); // move cursor to first column, erase line and print info
+//						fflush(stdout); // make the display refresh
+//						anymove=1;
+//						break;
+//
+//					case 36: // Home  = speed up
+//						speed+=BIG_SPEED_FACTOR;
+//						if (speed>MAX_SPEED)
+//						{
+//							speed=MAX_SPEED;
+//						};
+//						//c = getchar(); // get last character
+//
+//						kh4_get_speed(&vsl,&vsr,dsPic );
+//						kh4_set_speed(SIGN(vsl)*speed ,SIGN(vsr)*speed ,dsPic ); // set new speed, keeping direction with sign
+//						printf("\033[1`\033[Krobot speed: %d (%5.1f mm/s)",speed,speed*KH4_SPEED_TO_MM_S); // move cursor to first column, erase line and print info
+//						fflush(stdout); // make the display refresh
+//						anymove=1;
+//						break;
+//
+//					case 35: // End = speed down
+//						speed-=BIG_SPEED_FACTOR;
+//						if (speed<MIN_SPEED)
+//						{
+//							speed=MIN_SPEED;
+//						};
+//						//c = getchar(); // get last character
+//
+//						kh4_get_speed(&vsl,&vsr,dsPic );
+//						kh4_set_speed(SIGN(vsl)*speed ,SIGN(vsr)*speed,dsPic  ); // set new speed, keeping direction with sign
+//						printf("\033[1`\033[Krobot speed: %d (%5.1f mm/s)",speed,speed*KH4_SPEED_TO_MM_S); // move cursor to first column, erase line and print info
+//						fflush(stdout); // make the display refresh
+//						anymove=1;
+//						break;
+//
+//
+//					default:
+//						break;
+//					} // switch(c)
+//				} // escape with [
+//				else
+//				{ // other special key code
+//
+//					c = getchar();
+//
+//					switch(c){
+//
+//					case 72: // Home  = speed up
+//						speed+=BIG_SPEED_FACTOR;
+//						if (speed>MAX_SPEED)
+//						{
+//							speed=MAX_SPEED;
+//						};
+//						//c = getchar(); // get last character
+//
+//						kh4_get_speed(&vsl,&vsr,dsPic );
+//						kh4_set_speed(SIGN(vsl)*speed ,SIGN(vsr)*speed ,dsPic ); // set new speed, keeping direction with sign
+//						printf("\033[1`\033[Krobot speed: %d (%5.1f mm/s)",speed,speed*KH4_SPEED_TO_MM_S); // move cursor to first column, erase line and print info
+//						fflush(stdout); // make the display refresh
+//						anymove=1;
+//						break;
+//
+//					case 70: // End = speed down
+//						speed-=BIG_SPEED_FACTOR;
+//						if (speed<MIN_SPEED)
+//						{
+//							speed=MIN_SPEED;
+//						};
+//						//c = getchar(); // get last character
+//
+//						kh4_get_speed(&vsl,&vsr,dsPic );
+//						kh4_set_speed(SIGN(vsl)*speed ,SIGN(vsr)*speed,dsPic  ); // set new speed, keeping direction with sign
+//						printf("\033[1`\033[Krobot speed: %d (%5.1f mm/s)",speed,speed*KH4_SPEED_TO_MM_S); // move cursor to first column, erase line and print info
+//						fflush(stdout); // make the display refresh
+//						anymove=1;
+//						break;
+//
+//					default:
+//						break	;
+//
+//					}
+//
+//				} // ether special key code
+//
+//
+//			} // if (c== '\027')
+//			else
+//			{
+//				switch(c)
+//				{
+//				case 'q': // quit to main menu
+//					out=1;
+//					break;
+//				case 's': // stop motor
+//					kh4_set_speed(0,0,dsPic);
+//					break;
+//
+//				default:
+//					break;
+//				}
+//			}
+//
+//			gettimeofday(&startt,0x0);
+//		} else
+//		{
+//			gettimeofday(&endt,0x0);;
+//			// stop when no key is pushed after some time
+//
+//			if (anymove &&  (timeval_diff(NULL,&endt,&startt)>STOP_TIME))
+//			{
+//				kh4_set_speed(0 ,0,dsPic );
+//				anymove=0;
+//			}
+//		}
+//		usleep(10000); // wait some ms
+//	} // while
+//
+//	kb_change_term_mode(0); // switch to normal key input mode
+//	kh4_set_speed(0,0,dsPic );	 // stop robot
+//	kh4_SetMode(kh4RegIdle,dsPic );
+//	return 0;
 }
 
 int main(int argc , char *argv[])
@@ -384,7 +432,9 @@ int main(int argc , char *argv[])
     }
     printf("Connection accepted\n");
 
-    //drive_robot();
+    drive_robot(&read_size, &client_sock, client_message);
+
+    /*
 
     //Receive a message from client
     while( (read_size = recv(client_sock , client_message , 2000 , 0)) > 0 )
@@ -398,7 +448,7 @@ int main(int argc , char *argv[])
 //        }
         //write(client_sock , client_message , strlen(client_message));
     }
-
+*/
     if(read_size == 0)
     {
         printf("Client disconnected\n");

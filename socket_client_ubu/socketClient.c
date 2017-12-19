@@ -36,6 +36,7 @@ int main(int argc , char *argv[])
     puts("Connected\n");
 
     //keep communicating with server
+    char counter = 65;
     while(1)
     {
 //    	for(index = 0; index < strlen(message); index++){
@@ -49,7 +50,9 @@ int main(int argc , char *argv[])
 
         printf("Enter message : ");
         scanf("%s" , message);
-
+        message[1] = '\0';
+        message[0] = counter++;
+        printf("Sending %d as str %s\n", message[0], message);
         //Send some data
         if( send(sock , message , strlen(message)+1 , 0) < 0)
         {
@@ -67,6 +70,7 @@ int main(int argc , char *argv[])
         }
 
         printf("Remote Server reply: [%s]\n", server_reply);
+
     }
 
     close(sock);
