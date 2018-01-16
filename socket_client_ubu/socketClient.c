@@ -5,7 +5,21 @@
 #include <string.h>    //strlen
 #include <sys/socket.h>    //socket
 #include <arpa/inet.h> //inet_addr
-#include <curses.h>
+#include <unistd.h>
+#include <termios.h>
+
+int mygetch( )
+{
+   struct termios stary, nowy;
+   int dozwrocenia;
+   tcgetattr( STDIN_FILENO, &stary );
+   nowy = stary;
+   nowy.c_lflag &= ~( ICANON | ECHO );
+   tcsetattr( STDIN_FILENO, TCSANOW, &nowy );
+   dozwrocenia = getchar();
+   tcsetattr( STDIN_FILENO, TCSANOW, &stary );
+   return dozwrocenia;
+}
 
 int main(int argc , char *argv[])
 {
@@ -33,10 +47,12 @@ int main(int argc , char *argv[])
         return 1;
     }
 
-    puts("Connected\n");
+    printf("Connected\n");
 
     //keep communicating with server
-    char counter = 65;
+    char c = 0;
+    char newSpeed[5];
+    char *chr1, *chr2;
     while(1)
     {
 //    	for(index = 0; index < strlen(message); index++){
@@ -46,13 +62,28 @@ int main(int argc , char *argv[])
     	memset(&message, 0, 1000 * sizeof(char));
     	memset(&server_reply, 0, 1000 * sizeof(char));
     	//send(sock, message, strlen(message)+1, 0);
-    	printf("Before send: %s", message);
-
-        printf("Enter message : ");
-        scanf("%s" , message);
+//    	printf("Before send: %s", message);
+//
+//        printf("Enter message : ");
+//        scanf("%s" , message);
         message[1] = '\0';
-        message[0] = counter++;
-        printf("Sending %d as str %s\n", message[0], message);
+        message[0] = getchar();
+        c = message[0];
+        printf("wpisane: %c\n", c);
+        if(c == 's' || c == 'S')
+        {
+        	memset(&newSpeed, 0, 5 * sizeof(char));
+        	printf("podaj nową prędkość: ");
+        	scanf("%s", newSpeed);
+        	newSpeed[5] = 0;
+        	message[0] = 's';
+        	chr1 = &message[1];
+        	chr2 = &newSpeed[0];
+        	while (*chr1++ = *chr2++){
+        		;
+        	}
+        }
+
         //Send some data
         if( send(sock , message , strlen(message)+1 , 0) < 0)
         {

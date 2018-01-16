@@ -18,6 +18,7 @@
 #include <unistd.h>    //write
 #include <khepera/khepera.h>
 #include <signal.h>
+#include <limits.h>
 
 static knet_dev_t* dsPic;	//robot PIC microcontroller access
 static int quitReq = 0;
@@ -30,6 +31,7 @@ static void ctrlc_handler(int sig){
 
 	kh4_SetRGBLeds(0, 0, 0, 0, 0, 0, 0, 0, 0, dsPic);	//wygaszenie diod
 	kb_change_term_mode(0);		//revert to original terminal if called
+	system("kill $(pidof mjpg_streamer)");
 
 	exit(0);					//zakończenie programu
 }
@@ -61,18 +63,43 @@ long long timeval_diff(struct timeval *difference,
 
 } /* timeval_diff() */
 
-// TODO: adjust function drive_robot to sockets, remember timestamps
-int drive_robot(int* read_size, int* client_sock, char* client_message)
+
+int drive_robot(int* read_size, int* client_sock, char* client_message, int socket_desc)
 {
+	printf("\t\tSocket descriptor = %d\n", socket_desc);
+	sleep (1);
 	int out=0,speed=DEFAULT_SPEED*4,vsl,vsr,anymove=0;
-	char c;
-	struct timeval startt,endt;
+	char c, errReply[] = "error";
+	char* newSpeedValue;
+	struct timeval timestamp_start, timestamp_end, timeout;
+	fd_set readfds;
+
+	kh4_SetMode(kh4RegSpeed, dsPic);
+
+	//dlaczego to nie działa?
+//	while(1){
+//		timeout.tv_sec = 2;
+//		timeout.tv_usec = 100000;
+//
+//		FD_ZERO(&readfds);
+//		FD_SET(socket_desc, &readfds);
+//
+//		if(select(socket_desc+1, &readfds, NULL, NULL, &timeout) == -1){
+//			printf("Select function error\n");
+//			return -1;
+//		}
+//		if(FD_ISSET(socket_desc, &readfds)){
+//			printf("Odebrano dane\n");
+//		} else {
+//			printf("Koniec czasu!, silniki zatrzymane!\n");
+//		}
+//	}
 
 	printf("inside drive_robot fun\n");
-
-	while( (*read_size = recv(*client_sock , client_message , 2000 , 0)) > 0 )
+	speed = DEFAULT_SPEED;
+	while( (*read_size = recv(*client_sock , client_message , 2000 , 0)) > 0)
 	{
-		printf("Srv rcv: [%d]\n", client_message);
+		printf("Srv rcv: [%s]\n", client_message);
 		//Send the message back to client
 		send(*client_sock , client_message , strlen(client_message)+1 , 0);
 		//write(client_sock , client_message , strlen(client_message));
@@ -83,36 +110,66 @@ int drive_robot(int* read_size, int* client_sock, char* client_message)
 		c = client_message[0];
 		switch (c){
 		case 65:		//Up arrow
-			printf("\033[1`\033[KYou hit Up arrow\n");
-			//kh4_set_speed(speed, speed, dsPic);
-			//anymove = 1;
+			printf("You hit Up arrow\n");
+			//gettimeofday(&timestamp_start,0x0);
+
+			kh4_set_speed(speed, speed, dsPic);
+			usleep(300000);
+			kh4_set_speed(0,0,dsPic);
+//			anymove = 1;
 			break;
 		case 66: // DOWN arrow
-			printf("\033[1`\033[KYou hit Down arrow");
+			printf("You hit Down arrow\n");
+			kh4_set_speed(-speed, -speed, dsPic);
+			usleep(300000);
+			kh4_set_speed(0, 0, dsPic);
 //			kh4_set_speed(-speed ,-speed,dsPic  );
 //			anymove=1;
 			break;
 		case 68: // LEFT arrow
-			printf("\033[1`\033[KYou hit Left arrow");
-//			if (speed > ROT_SPEED_HIGH_TRESH) // at high speed, rotate too fast
-//				kh4_set_speed(-speed*ROTATE_HIGH_SPEED_FACT ,speed*ROTATE_HIGH_SPEED_FACT ,dsPic );
-//			else
-//				kh4_set_speed(-speed*ROTATE_LOW_SPEED_FACT ,speed*ROTATE_LOW_SPEED_FACT ,dsPic );
+			printf("You hit Left arrow\n");
+			if (speed > ROT_SPEED_HIGH_TRESH) // at high speed, rotate too fast
+				kh4_set_speed(-speed*ROTATE_HIGH_SPEED_FACT ,speed*ROTATE_HIGH_SPEED_FACT ,dsPic );
+			else
+				kh4_set_speed(-speed*ROTATE_LOW_SPEED_FACT ,speed*ROTATE_LOW_SPEED_FACT ,dsPic );
+			usleep(300000);
+			kh4_set_speed(0, 0, dsPic);
 //			anymove=1;
 			break;
 
 		case 67: // RIGHT arrow = right
-			printf("\033[1`\033[You hit Right arrow");
-//			if (speed > ROT_SPEED_HIGH_TRESH) // at high speed, rotate too fast
-//				kh4_set_speed(speed*ROTATE_HIGH_SPEED_FACT ,-speed*ROTATE_HIGH_SPEED_FACT ,dsPic );
-//			else
-//				kh4_set_speed(speed*ROTATE_LOW_SPEED_FACT ,-speed*ROTATE_LOW_SPEED_FACT ,dsPic );
+			printf("You hit Right arrow\n");
+			if (speed > ROT_SPEED_HIGH_TRESH) // at high speed, rotate too fast
+				kh4_set_speed(speed*ROTATE_HIGH_SPEED_FACT ,-speed*ROTATE_HIGH_SPEED_FACT ,dsPic );
+			else
+				kh4_set_speed(speed*ROTATE_LOW_SPEED_FACT ,-speed*ROTATE_LOW_SPEED_FACT ,dsPic );
+			usleep(300000);
+			kh4_set_speed(0, 0, dsPic);
 //			anymove=1;
 			break;
+		case 's':
+		case 'S':
+			newSpeedValue = &client_message[1];
+			if(atoi(newSpeedValue) >= MIN_SPEED && atoi(newSpeedValue) <= MAX_SPEED){
+				printf("speedValue OK, [%s]\n", newSpeedValue);
+				speed = atoi(newSpeedValue);
+				send(*client_sock , newSpeedValue , strlen(newSpeedValue)+1 , 0);
+				printf("new speed value sent.\n");
+			}
+			else{
+				send(*client_sock, errReply, strlen(errReply)+1, 0);
+			}
+			break;
 		default:
+			printf(".[");	//debug
+			kh4_set_speed(0,0,dsPic);
 			break;
 		}
+		memset(client_message, 0, 2000 * sizeof(char));
 	}
+
+
+
 	printf("\n");
 	return 0;
 
@@ -322,6 +379,8 @@ int main(int argc , char *argv[])
     int socket_desc , client_sock , c , read_size;
     struct sockaddr_in server , client;
     char client_message[2000];
+    const char cameraStartCommand[] = "mjpg_streamer -i \"input_uvc.so -yuv -f 15\" -o \"output_http.so -w /usr/local/mjpg-streamer/www\"&";
+    const char cameraStopCommand[] = "kill $(pidof mjpg_streamer)";
 
 
     char Buffer[100],revision,version;
@@ -392,6 +451,9 @@ int main(int argc , char *argv[])
 		kh4_SetRGBLeds(0, i, 0, i, 0, 0, 0, 0, i, dsPic);
 		usleep(20000);
 	}
+
+	//Camera streaming start
+	system(cameraStartCommand);
 	kh4_SetRGBLeds(0, 0, 0, 0, 0, 0, 0, 0, 0, dsPic);		//stop LED
 
     //Create socket
@@ -432,7 +494,7 @@ int main(int argc , char *argv[])
     }
     printf("Connection accepted\n");
 
-    drive_robot(&read_size, &client_sock, client_message);
+    drive_robot(&read_size, &client_sock, client_message, socket_desc);
 
     /*
 
@@ -464,7 +526,8 @@ int main(int argc , char *argv[])
     kh4_set_speed(0, 0, dsPic);
     kh4_SetRGBLeds(0, 0, 0, 0, 0, 0, 0, 0, 0, dsPic);
     kh4_SetMode(kh4RegIdle, dsPic);		//w tym trybie silniki nie pobierają prądu
-    printf("Motors stoped and turn on idle mode, all LEDs switched off\n\n");
+    system(cameraStopCommand);
+    printf("Motors stoped and turn on idle mode, all LEDs switched off\ncamera stoped\n\n");
 
     return 0;
 }
