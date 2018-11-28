@@ -8,6 +8,9 @@
 #define ROTATE_LOW_SPEED_FACT 0.75
 #define ROT_SPEED_HIGH_TRESH 300
 #define STOP_TIME 100000 // us
+#define DETECTION_THRESHOLD 40
+#define PULSES_PER_MM 147.4
+#define PULSES_PER_ONE_DEGREE 139
 
 #define SIGN(x) ((x)>0?1:((x)<0?-1:0))  // sign or zero
 
@@ -20,132 +23,81 @@
 #include <signal.h>
 #include <limits.h>
 
+void azimuth_convert_to_pulses(char* client_message);
+void azimuth_drive(long length_pulses, long angle_pulses);
+void turn_off();
+
 static knet_dev_t* dsPic;	//robot PIC microcontroller access
 static int quitReq = 0;
 
 static void ctrlc_handler(int sig){
 	quitReq = 1;
-
-	kh4_set_speed(0, 0, dsPic);		//zatrzymanie robota
-	kh4_SetMode(kh4RegIdle, dsPic);		//wprowadzenie w tryb bezczynny
-
-	kh4_SetRGBLeds(0, 0, 0, 0, 0, 0, 0, 0, 0, dsPic);	//wygaszenie diod
-	kb_change_term_mode(0);		//revert to original terminal if called
-	system("kill $(pidof mjpg_streamer)");
-
-	exit(0);					//zakończenie programu
+	turn_off();
+	exit(0);					//exit the program
 }
-
-long long timeval_diff(struct timeval *difference,
-		struct timeval *end_time,
-		struct timeval *start_time)
-{
-	struct timeval temp_diff;
-
-	if(difference==NULL)
-	{
-		difference=&temp_diff;
-	}
-
-	difference->tv_sec =end_time->tv_sec -start_time->tv_sec ;
-	difference->tv_usec=end_time->tv_usec-start_time->tv_usec;
-
-	/* Using while instead of if below makes the code slightly more robust. */
-
-	while(difference->tv_usec<0)
-	{
-		difference->tv_usec+=1000000;
-		difference->tv_sec -=1;
-	}
-
-	return 1000000LL*difference->tv_sec+
-			difference->tv_usec;
-
-} /* timeval_diff() */
 
 
 int drive_robot(int* read_size, int* client_sock, char* client_message, int socket_desc)
 {
 	printf("\t\tSocket descriptor = %d\n", socket_desc);
 	sleep (1);
-	int out=0,speed=DEFAULT_SPEED*4,vsl,vsr,anymove=0;
+	int speed=DEFAULT_SPEED;
+	int oldSpeedValue = speed;
 	char c, errReply[] = "error";
 	char* newSpeedValue;
-	struct timeval timestamp_start, timestamp_end, timeout;
-	fd_set readfds;
 
 	kh4_SetMode(kh4RegSpeed, dsPic);
 
-	//dlaczego to nie działa?
-//	while(1){
-//		timeout.tv_sec = 2;
-//		timeout.tv_usec = 100000;
-//
-//		FD_ZERO(&readfds);
-//		FD_SET(socket_desc, &readfds);
-//
-//		if(select(socket_desc+1, &readfds, NULL, NULL, &timeout) == -1){
-//			printf("Select function error\n");
-//			return -1;
-//		}
-//		if(FD_ISSET(socket_desc, &readfds)){
-//			printf("Odebrano dane\n");
-//		} else {
-//			printf("Koniec czasu!, silniki zatrzymane!\n");
-//		}
-//	}
-
 	printf("inside drive_robot fun\n");
-	speed = DEFAULT_SPEED;
+
 	while( (*read_size = recv(*client_sock , client_message , 2000 , 0)) > 0)
 	{
 		printf("Srv rcv: [%s]\n", client_message);
 		//Send the message back to client
 		send(*client_sock , client_message , strlen(client_message)+1 , 0);
-		//write(client_sock , client_message , strlen(client_message));
-		//        for(i = 0; i < strlen(client_message); i++){
-		//        	client_message[i] = '\0';
-		//        }
-		//write(client_sock , client_message , strlen(client_message));
+
 		c = client_message[0];
 		switch (c){
 		case 65:		//Up arrow
-			printf("You hit Up arrow\n");
-			//gettimeofday(&timestamp_start,0x0);
 
 			kh4_set_speed(speed, speed, dsPic);
 			usleep(300000);
 			kh4_set_speed(0,0,dsPic);
-//			anymove = 1;
 			break;
+
 		case 66: // DOWN arrow
-			printf("You hit Down arrow\n");
+
 			kh4_set_speed(-speed, -speed, dsPic);
 			usleep(300000);
 			kh4_set_speed(0, 0, dsPic);
-//			kh4_set_speed(-speed ,-speed,dsPic  );
-//			anymove=1;
 			break;
+
 		case 68: // LEFT arrow
+			oldSpeedValue = speed;
+			speed = DEFAULT_SPEED - 50;
+			kh4_set_speed(-speed, speed, dsPic);
 			printf("You hit Left arrow\n");
-			if (speed > ROT_SPEED_HIGH_TRESH) // at high speed, rotate too fast
-				kh4_set_speed(-speed*ROTATE_HIGH_SPEED_FACT ,speed*ROTATE_HIGH_SPEED_FACT ,dsPic );
-			else
-				kh4_set_speed(-speed*ROTATE_LOW_SPEED_FACT ,speed*ROTATE_LOW_SPEED_FACT ,dsPic );
+//			if (speed > ROT_SPEED_HIGH_TRESH) // at high speed, rotate too fast
+//				kh4_set_speed(-speed*ROTATE_HIGH_SPEED_FACT ,speed*ROTATE_HIGH_SPEED_FACT ,dsPic );
+//			else
+//				kh4_set_speed(-speed*ROTATE_LOW_SPEED_FACT ,speed*ROTATE_LOW_SPEED_FACT ,dsPic );
 			usleep(300000);
+			speed = oldSpeedValue;
 			kh4_set_speed(0, 0, dsPic);
-//			anymove=1;
 			break;
 
 		case 67: // RIGHT arrow = right
+			oldSpeedValue = speed;
+			speed = DEFAULT_SPEED;
+			kh4_set_speed(speed, -speed, dsPic);
 			printf("You hit Right arrow\n");
-			if (speed > ROT_SPEED_HIGH_TRESH) // at high speed, rotate too fast
-				kh4_set_speed(speed*ROTATE_HIGH_SPEED_FACT ,-speed*ROTATE_HIGH_SPEED_FACT ,dsPic );
-			else
-				kh4_set_speed(speed*ROTATE_LOW_SPEED_FACT ,-speed*ROTATE_LOW_SPEED_FACT ,dsPic );
+//			if (speed > ROT_SPEED_HIGH_TRESH) // at high speed, rotate too fast
+//				kh4_set_speed(speed*ROTATE_HIGH_SPEED_FACT ,-speed*ROTATE_HIGH_SPEED_FACT ,dsPic );
+//			else
+//				kh4_set_speed(speed*ROTATE_LOW_SPEED_FACT ,-speed*ROTATE_LOW_SPEED_FACT ,dsPic );
+			speed = oldSpeedValue;
 			usleep(300000);
 			kh4_set_speed(0, 0, dsPic);
-//			anymove=1;
 			break;
 		case 's':
 		case 'S':
@@ -160,218 +112,22 @@ int drive_robot(int* read_size, int* client_sock, char* client_message, int sock
 				send(*client_sock, errReply, strlen(errReply)+1, 0);
 			}
 			break;
+		case 'a':
+			printf("azimuth drive entering...\n");
+			azimuth_convert_to_pulses(client_message);
+			break;
 		default:
 			printf(".[");	//debug
 			kh4_set_speed(0,0,dsPic);
 			break;
 		}
-		memset(client_message, 0, 2000 * sizeof(char));
+		memset(client_message, 0, 2000 * sizeof(char));		//clear the client_message buffer
 	}
 
 
 
 	printf("\n");
 	return 0;
-
-//
-//	//kb_clrscr(); // erase screen
-//
-//	printf("Drive the robot with the keyboard:\n  's' for stop\n  arrows (UP, DOWN, LEFT , RIGHT) for direction\n  PAGE UP/DOWN for changing speed  by small increments\n  Home/End for changing speed by big increments\n  'q' for going back to main menu\n");
-//
-//	printf("\ndefault parameters:\n  robot speed %d  (%5.1f mm/s)  (min %d, max %d)\n\n",DEFAULT_SPEED,DEFAULT_SPEED*KH4_SPEED_TO_MM_S,MIN_SPEED,MAX_SPEED);
-//	kb_change_term_mode(1); // change terminal mode for kbhit and getchar to return immediately
-//	kh4_SetMode(kh4RegSpeed, dsPic);
-//	gettimeofday(&startt,0x0);
-//
-//	// loop until 'q' is pushed
-//	while(!out)
-//	{
-//		if(kb_kbhit())
-//		{
-//			c = getchar();
-//
-//
-//			// get special keys
-//			if (c == 27)
-//			{
-//
-//				if (c = getchar() == 91) // escape with [
-//				{
-//					c = getchar();
-//
-//					switch(c)
-//					{
-//					case 65: // UP arrow = forward
-//						kh4_set_speed(speed ,speed,dsPic );
-//						anymove=1;
-//						break;
-//					case 66: // DOWN arrow = backward
-//						kh4_set_speed(-speed ,-speed,dsPic  );
-//						anymove=1;
-//						break;
-//
-//					case 68: // LEFT arrow = left
-//						if (speed > ROT_SPEED_HIGH_TRESH) // at high speed, rotate too fast
-//							kh4_set_speed(-speed*ROTATE_HIGH_SPEED_FACT ,speed*ROTATE_HIGH_SPEED_FACT ,dsPic );
-//						else
-//							kh4_set_speed(-speed*ROTATE_LOW_SPEED_FACT ,speed*ROTATE_LOW_SPEED_FACT ,dsPic );
-//						anymove=1;
-//						break;
-//
-//					case 67: // RIGHT arrow = right
-//						if (speed > ROT_SPEED_HIGH_TRESH) // at high speed, rotate too fast
-//							kh4_set_speed(speed*ROTATE_HIGH_SPEED_FACT ,-speed*ROTATE_HIGH_SPEED_FACT ,dsPic );
-//						else
-//							kh4_set_speed(speed*ROTATE_LOW_SPEED_FACT ,-speed*ROTATE_LOW_SPEED_FACT ,dsPic );
-//						anymove=1;
-//						break;
-//
-//					case 53: // PAGE UP  = speed up
-//						speed+=SPEED_FACTOR;
-//						if (speed>MAX_SPEED)
-//						{
-//							speed=MAX_SPEED;
-//						};
-//						c = getchar(); // get last character
-//
-//						kh4_get_speed(&vsl,&vsr,dsPic );
-//						kh4_set_speed(SIGN(vsl)*speed ,SIGN(vsr)*speed ,dsPic ); // set new speed, keeping direction with sign
-//						printf("\033[1`\033[Krobot speed: %d (%5.1f mm/s)",speed,speed*KH4_SPEED_TO_MM_S); // move cursor to first column, erase line and print info
-//						fflush(stdout); // make the display refresh
-//						anymove=1;
-//						break;
-//
-//					case 54: // PAGE DOWN = speed down
-//						speed-=SPEED_FACTOR;
-//						if (speed<MIN_SPEED)
-//						{
-//							speed=MIN_SPEED;
-//						};
-//						c = getchar(); // get last character
-//
-//						kh4_get_speed(&vsl,&vsr,dsPic );
-//						kh4_set_speed(SIGN(vsl)*speed ,SIGN(vsr)*speed,dsPic  ); // set new speed, keeping direction with sign
-//						printf("\033[1`\033[Krobot speed: %d (%5.1f mm/s)",speed,speed*KH4_SPEED_TO_MM_S); // move cursor to first column, erase line and print info
-//						fflush(stdout); // make the display refresh
-//						anymove=1;
-//						break;
-//
-//					case 36: // Home  = speed up
-//						speed+=BIG_SPEED_FACTOR;
-//						if (speed>MAX_SPEED)
-//						{
-//							speed=MAX_SPEED;
-//						};
-//						//c = getchar(); // get last character
-//
-//						kh4_get_speed(&vsl,&vsr,dsPic );
-//						kh4_set_speed(SIGN(vsl)*speed ,SIGN(vsr)*speed ,dsPic ); // set new speed, keeping direction with sign
-//						printf("\033[1`\033[Krobot speed: %d (%5.1f mm/s)",speed,speed*KH4_SPEED_TO_MM_S); // move cursor to first column, erase line and print info
-//						fflush(stdout); // make the display refresh
-//						anymove=1;
-//						break;
-//
-//					case 35: // End = speed down
-//						speed-=BIG_SPEED_FACTOR;
-//						if (speed<MIN_SPEED)
-//						{
-//							speed=MIN_SPEED;
-//						};
-//						//c = getchar(); // get last character
-//
-//						kh4_get_speed(&vsl,&vsr,dsPic );
-//						kh4_set_speed(SIGN(vsl)*speed ,SIGN(vsr)*speed,dsPic  ); // set new speed, keeping direction with sign
-//						printf("\033[1`\033[Krobot speed: %d (%5.1f mm/s)",speed,speed*KH4_SPEED_TO_MM_S); // move cursor to first column, erase line and print info
-//						fflush(stdout); // make the display refresh
-//						anymove=1;
-//						break;
-//
-//
-//					default:
-//						break;
-//					} // switch(c)
-//				} // escape with [
-//				else
-//				{ // other special key code
-//
-//					c = getchar();
-//
-//					switch(c){
-//
-//					case 72: // Home  = speed up
-//						speed+=BIG_SPEED_FACTOR;
-//						if (speed>MAX_SPEED)
-//						{
-//							speed=MAX_SPEED;
-//						};
-//						//c = getchar(); // get last character
-//
-//						kh4_get_speed(&vsl,&vsr,dsPic );
-//						kh4_set_speed(SIGN(vsl)*speed ,SIGN(vsr)*speed ,dsPic ); // set new speed, keeping direction with sign
-//						printf("\033[1`\033[Krobot speed: %d (%5.1f mm/s)",speed,speed*KH4_SPEED_TO_MM_S); // move cursor to first column, erase line and print info
-//						fflush(stdout); // make the display refresh
-//						anymove=1;
-//						break;
-//
-//					case 70: // End = speed down
-//						speed-=BIG_SPEED_FACTOR;
-//						if (speed<MIN_SPEED)
-//						{
-//							speed=MIN_SPEED;
-//						};
-//						//c = getchar(); // get last character
-//
-//						kh4_get_speed(&vsl,&vsr,dsPic );
-//						kh4_set_speed(SIGN(vsl)*speed ,SIGN(vsr)*speed,dsPic  ); // set new speed, keeping direction with sign
-//						printf("\033[1`\033[Krobot speed: %d (%5.1f mm/s)",speed,speed*KH4_SPEED_TO_MM_S); // move cursor to first column, erase line and print info
-//						fflush(stdout); // make the display refresh
-//						anymove=1;
-//						break;
-//
-//					default:
-//						break	;
-//
-//					}
-//
-//				} // ether special key code
-//
-//
-//			} // if (c== '\027')
-//			else
-//			{
-//				switch(c)
-//				{
-//				case 'q': // quit to main menu
-//					out=1;
-//					break;
-//				case 's': // stop motor
-//					kh4_set_speed(0,0,dsPic);
-//					break;
-//
-//				default:
-//					break;
-//				}
-//			}
-//
-//			gettimeofday(&startt,0x0);
-//		} else
-//		{
-//			gettimeofday(&endt,0x0);;
-//			// stop when no key is pushed after some time
-//
-//			if (anymove &&  (timeval_diff(NULL,&endt,&startt)>STOP_TIME))
-//			{
-//				kh4_set_speed(0 ,0,dsPic );
-//				anymove=0;
-//			}
-//		}
-//		usleep(10000); // wait some ms
-//	} // while
-//
-//	kb_change_term_mode(0); // switch to normal key input mode
-//	kh4_set_speed(0,0,dsPic );	 // stop robot
-//	kh4_SetMode(kh4RegIdle,dsPic );
-//	return 0;
 }
 
 int main(int argc , char *argv[])
@@ -390,7 +146,7 @@ int main(int argc , char *argv[])
 
     printf("Próba sterowania Khepera IV.");
 
-    //inicjalizacja biblioteki
+    //-----------------------library initialization
     if(kh4_init(0, NULL) != 0){
     	printf("\nERROR: could not initiate the libkhepera!\n\n");
     	return -1;
@@ -403,13 +159,13 @@ int main(int argc , char *argv[])
     	return -2;
     }
 
-    //--------------------- wyłączenie czujników ultradźwiękowych
-    kh4_activate_us(0, dsPic);		//31 włącza wszystkie
+    //--------------------- turn off ultrasound sensors
+    kh4_activate_us(0, dsPic);		//31 turns all on
 
-    //---------------------inicjalizacja silników--------------------------
-    //parametry:
-    pmarg = 20;					//margines błędu
-    kh4_SetPositionMargin(pmarg, dsPic);	//wysłanie ustawienia do uC
+    //---------------------initializing motors
+    //parameters:
+    pmarg = 20;					//error margin
+    kh4_SetPositionMargin(pmarg, dsPic);	//sending settings to uC
     kp = 10;
     ki = 5;
     kd = 1;
@@ -417,12 +173,12 @@ int main(int argc , char *argv[])
 
     accinc = 3;		//acceleration increment (1-255)
     accdiv = 0;		//acceleration divider (0-255)
-    minspacc = 20;	//minimum speed acceleration (minimalna prędkość używana przez uC)
+    minspacc = 20;	//minimum speed acceleration
     minspdec = 1;	//minimum speed dec
     maxsp = 400;	//(max 1200)
 
     kh4_SetSpeedProfile(accinc, accdiv, minspacc, minspdec, maxsp, dsPic);
-    kh4_SetMode(kh4RegIdle, dsPic);			//ustawienie trybu bezczynności (no control)
+    kh4_SetMode(kh4RegIdle, dsPic);			//turn idle mode (no control)
 
     // get revision
     if(kh4_revision(Buffer, dsPic)==0){
@@ -444,7 +200,7 @@ int main(int argc , char *argv[])
 	printf("  voltage           :  %4.0f mV \n",(Buffer[10] | Buffer[11]<<8)*9.76);
 	printf("  charger           :  %s\n",kh4_battery_charge(dsPic)?"plugged":"unplugged");
 
-	//------RGB LED example------------------------------------------------------
+	//------RGB LED flash------------------------------------------------------
 	printf("\nRGB LED example\n");
 
 	for(i = 0; i<0x20; i++){		//0x20 => 50% brightness
@@ -452,11 +208,11 @@ int main(int argc , char *argv[])
 		usleep(20000);
 	}
 
-	//Camera streaming start
+	//-------------------------Camera streaming start
 	system(cameraStartCommand);
 	kh4_SetRGBLeds(0, 0, 0, 0, 0, 0, 0, 0, 0, dsPic);		//stop LED
 
-    //Create socket
+    //-------------------------Create socket
     socket_desc = socket(AF_INET , SOCK_STREAM , 0);
     if (socket_desc == -1)
     {
@@ -464,21 +220,20 @@ int main(int argc , char *argv[])
     }
     printf("Socket created\n");
 
-    //Prepare the sockaddr_in structure
+    //--------------Prepare the sockaddr_in structure
     server.sin_family = AF_INET;
     server.sin_addr.s_addr = INADDR_ANY;
     server.sin_port = htons( 8888 );
 
-    //Bind
+    //-----------------Bind
     if( bind(socket_desc,(struct sockaddr *)&server , sizeof(server)) < 0)
     {
-        //print the error message
         perror("bind failed. Error");
         return 1;
     }
     printf("bind done\n");
 
-    //Listen
+    //Listen on socket
     listen(socket_desc , 3);
 
     //Accept and incoming connection
@@ -496,21 +251,6 @@ int main(int argc , char *argv[])
 
     drive_robot(&read_size, &client_sock, client_message, socket_desc);
 
-    /*
-
-    //Receive a message from client
-    while( (read_size = recv(client_sock , client_message , 2000 , 0)) > 0 )
-    {
-    	printf("Srv rcv: [%s]\n", client_message);
-        //Send the message back to client
-    	send(client_sock , client_message , strlen(client_message)+1 , 0);
-        //write(client_sock , client_message , strlen(client_message));
-//        for(i = 0; i < strlen(client_message); i++){
-//        	client_message[i] = '\0';
-//        }
-        //write(client_sock , client_message , strlen(client_message));
-    }
-*/
     if(read_size == 0)
     {
         printf("Client disconnected\n");
@@ -521,13 +261,68 @@ int main(int argc , char *argv[])
         perror("recv failed");
     }
 
-    //na koniec upewnijmy się, że silniki nie pracują
-    //a diody nie świecą:
-    kh4_set_speed(0, 0, dsPic);
-    kh4_SetRGBLeds(0, 0, 0, 0, 0, 0, 0, 0, 0, dsPic);
-    kh4_SetMode(kh4RegIdle, dsPic);		//w tym trybie silniki nie pobierają prądu
-    system(cameraStopCommand);
-    printf("Motors stoped and turn on idle mode, all LEDs switched off\ncamera stoped\n\n");
+    turn_off();
+    printf("Motors stopped and turn on idle mode, all LEDs switched off\ncamera stopped\n\n");
 
     return 0;
+}
+
+void azimuth_convert_to_pulses(char* client_message){
+	long length = 0;
+	float angle = 0;
+	int index;
+	char message[7];				//tmp variable. Used for decode command
+	char* p_message = &message;
+	char* p_client_message = &client_message[1];
+
+	while(*p_client_message != ';'){
+		*p_message = *p_client_message;
+		p_message++;
+		p_client_message++;
+	}
+	*p_message = '\0';
+	printf("\nOtrzymane %s", client_message);
+	printf("\n%s", p_message);
+	length = atof(message);			//length in pixels
+	if (length > 105){
+		length = PULSES_PER_MM * 150;			//max length in pulses
+	} else {
+		length /= 7;				//length in cm
+		length *= (PULSES_PER_MM * 10);	//length in pulses
+	}
+
+	for(index = 0; index < sizeof(message); index++){
+		message[index] = '\0';			//clear table
+	}
+
+	p_client_message++;
+	p_message = &message;
+
+	while(*p_client_message){
+		*p_message = *p_client_message;
+		p_message++;
+		p_client_message++;
+	}
+	angle = atof(message);					//angle in degrees
+	printf("Azimuth: %ld\t\t%.2f st", length, angle);
+
+	angle *= PULSES_PER_ONE_DEGREE;			//angle in pulses
+}
+
+void azimuth_drive(long length_pulses, long angle_pulses){
+	kh4_ResetEncoders(dsPic);
+	kh4_SetMode(kh4RegPosition, dsPic);
+	if(angle_pulses < 0){
+		kh4_set_position(angle_pulses, (angle_pulses * -1), dsPic);
+	} else {
+		kh4_set_position((angle_pulses * -1), angle_pulses, dsPic);
+	}
+}
+
+void turn_off(){
+	kh4_set_speed(0, 0, dsPic);		//stop the robot
+	kh4_SetMode(kh4RegIdle, dsPic);		//turn on idle mode
+	kh4_SetRGBLeds(0, 0, 0, 0, 0, 0, 0, 0, 0, dsPic);	//all LED off
+	kb_change_term_mode(0);		//revert to original terminal if called
+	system("kill $(pidof mjpg_streamer)");		//turn camera off
 }
