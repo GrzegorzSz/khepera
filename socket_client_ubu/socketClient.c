@@ -36,7 +36,7 @@ int main(int argc , char *argv[])
     }
     printf("Socket created %d", sock);
 
-    server.sin_addr.s_addr = inet_addr("172.16.18.165");
+    server.sin_addr.s_addr = inet_addr("192.168.1.28");
     server.sin_family = AF_INET;
     server.sin_port = htons( 8888 );
 

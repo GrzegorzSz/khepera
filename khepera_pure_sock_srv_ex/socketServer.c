@@ -136,7 +136,6 @@ int main(int argc , char *argv[])
     struct sockaddr_in server , client;
     char client_message[2000];
     const char cameraStartCommand[] = "mjpg_streamer -i \"input_uvc.so -yuv -f 15\" -o \"output_http.so -w /usr/local/mjpg-streamer/www\"&";
-    const char cameraStopCommand[] = "kill $(pidof mjpg_streamer)";
 
 
     char Buffer[100],revision,version;
@@ -272,7 +271,7 @@ void azimuth_convert_to_pulses(char* client_message){
 	float angle = 0;
 	int index;
 	char message[7];				//tmp variable. Used for decode command
-	char* p_message = &message;
+	char* p_message = message;
 	char* p_client_message = &client_message[1];
 
 	while(*p_client_message != ';'){
@@ -280,9 +279,9 @@ void azimuth_convert_to_pulses(char* client_message){
 		p_message++;
 		p_client_message++;
 	}
-	*p_message = '\0';
+	*p_message = 0;
 	printf("\nOtrzymane %s", client_message);
-	printf("\n%s", p_message);
+	printf("\ndroga: %s", message);
 	length = atof(message);			//length in pixels
 	if (length > 105){
 		length = PULSES_PER_MM * 150;			//max length in pulses
@@ -304,19 +303,28 @@ void azimuth_convert_to_pulses(char* client_message){
 		p_client_message++;
 	}
 	angle = atof(message);					//angle in degrees
-	printf("Azimuth: %ld\t\t%.2f st", length, angle);
+	printf("Azimuth: %ld\t\t%.2f st\n", length, angle);
 
 	angle *= PULSES_PER_ONE_DEGREE;			//angle in pulses
+	azimuth_drive(length, (long)angle);
 }
 
 void azimuth_drive(long length_pulses, long angle_pulses){
+	int position = 0;
+	printf("Azimuth drive len: %d angl: %d\n", length_pulses, angle_pulses);
 	kh4_ResetEncoders(dsPic);
 	kh4_SetMode(kh4RegPosition, dsPic);
-	if(angle_pulses < 0){
-		kh4_set_position(angle_pulses, (angle_pulses * -1), dsPic);
-	} else {
-		kh4_set_position((angle_pulses * -1), angle_pulses, dsPic);
-	}
+	kh4_set_position(angle_pulses, (angle_pulses * -1), dsPic);
+	usleep(200000);
+	do
+	{
+		kh4_get_position(&position, &position, dsPic);
+		printf("Position: %d\n", position);
+		usleep(100000);
+	}while((abs(angle_pulses) - abs(position)) > 5);
+	//usleep(200);
+	kh4_ResetEncoders(dsPic);
+	kh4_set_position(length_pulses, length_pulses, dsPic);
 }
 
 void turn_off(){
@@ -325,4 +333,5 @@ void turn_off(){
 	kh4_SetRGBLeds(0, 0, 0, 0, 0, 0, 0, 0, 0, dsPic);	//all LED off
 	kb_change_term_mode(0);		//revert to original terminal if called
 	system("kill $(pidof mjpg_streamer)");		//turn camera off
+	printf("\nAll turned off\n");
 }
