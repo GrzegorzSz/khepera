@@ -3,7 +3,7 @@
 #define SPEED_FACTOR 1
 #define MAX_SPEED 1500
 #define MIN_SPEED 15
-#define DEFAULT_SPEED 200
+#define DEFAULT_SPEED 400
 #define ROTATE_HIGH_SPEED_FACT 0.5
 #define ROTATE_LOW_SPEED_FACT 0.75
 #define ROT_SPEED_HIGH_TRESH 300
@@ -26,6 +26,7 @@
 void azimuth_convert_to_pulses(char* client_message);
 void azimuth_drive(long length_pulses, long angle_pulses);
 void turn_off();
+void circle_path_drive(char* client_message);
 
 static knet_dev_t* dsPic;	//robot PIC microcontroller access
 static int quitReq = 0;
@@ -45,6 +46,7 @@ int drive_robot(int* read_size, int* client_sock, char* client_message, int sock
 	int oldSpeedValue = speed;
 	char c, errReply[] = "error";
 	char* newSpeedValue;
+	char travelCompletedMsg[] = "travel_completed";
 
 	kh4_SetMode(kh4RegSpeed, dsPic);
 
@@ -74,9 +76,8 @@ int drive_robot(int* read_size, int* client_sock, char* client_message, int sock
 
 		case 68: // LEFT arrow
 			oldSpeedValue = speed;
-			speed = DEFAULT_SPEED - 50;
+			speed = DEFAULT_SPEED - 150;
 			kh4_set_speed(-speed, speed, dsPic);
-			printf("You hit Left arrow\n");
 //			if (speed > ROT_SPEED_HIGH_TRESH) // at high speed, rotate too fast
 //				kh4_set_speed(-speed*ROTATE_HIGH_SPEED_FACT ,speed*ROTATE_HIGH_SPEED_FACT ,dsPic );
 //			else
@@ -88,9 +89,8 @@ int drive_robot(int* read_size, int* client_sock, char* client_message, int sock
 
 		case 67: // RIGHT arrow = right
 			oldSpeedValue = speed;
-			speed = DEFAULT_SPEED;
+			speed = DEFAULT_SPEED-150;
 			kh4_set_speed(speed, -speed, dsPic);
-			printf("You hit Right arrow\n");
 //			if (speed > ROT_SPEED_HIGH_TRESH) // at high speed, rotate too fast
 //				kh4_set_speed(speed*ROTATE_HIGH_SPEED_FACT ,-speed*ROTATE_HIGH_SPEED_FACT ,dsPic );
 //			else
@@ -113,8 +113,15 @@ int drive_robot(int* read_size, int* client_sock, char* client_message, int sock
 			}
 			break;
 		case 'a':
-			printf("azimuth drive entering...\n");
 			azimuth_convert_to_pulses(client_message);
+			break;
+		case 'r':
+			void circle_path_drive(client_message);
+			break;
+		case 'p':
+			printf("path drive choosen");
+			azimuth_convert_to_pulses(client_message);
+			send(*client_sock, travelCompletedMsg, strlen(travelCompletedMsg)+1, 0);
 			break;
 		default:
 			printf(".[");	//debug
@@ -143,7 +150,6 @@ int main(int argc , char *argv[])
     int kp,ki,kd;
     int pmarg,maxsp,accinc,accdiv,minspacc, minspdec; // SetSpeedProfile
 
-    printf("Próba sterowania Khepera IV.");
 
     //-----------------------library initialization
     if(kh4_init(0, NULL) != 0){
@@ -261,9 +267,14 @@ int main(int argc , char *argv[])
     }
 
     turn_off();
-    printf("Motors stopped and turn on idle mode, all LEDs switched off\ncamera stopped\n\n");
 
     return 0;
+}
+
+void circle_path_drive(char* client_message){
+	char* p_message = &client_message[1];
+	double radius = atof(*p_message);
+	double wheel_rad = radius + 52.35;
 }
 
 void azimuth_convert_to_pulses(char* client_message){
@@ -283,11 +294,19 @@ void azimuth_convert_to_pulses(char* client_message){
 	printf("\nOtrzymane %s", client_message);
 	printf("\ndroga: %s", message);
 	length = atof(message);			//length in pixels
-	if (length > 105){
-		length = PULSES_PER_MM * 150;			//max length in pulses
+	if(client_message[0] == 'a'){
+
+		if (length > 105){
+			length = PULSES_PER_MM * 150;			//max length in pulses
+		} else {
+			length /= 7;				//length in cm
+			length *= (PULSES_PER_MM * 10);	//length in pulses
+		}
 	} else {
-		length /= 7;				//length in cm
-		length *= (PULSES_PER_MM * 10);	//length in pulses
+		//expected length of path in mm delivered by client_message
+		printf("inside of other than a[] message\n");
+		length *= PULSES_PER_MM;
+		printf("length calculated.\n");
 	}
 
 	for(index = 0; index < sizeof(message); index++){
@@ -311,6 +330,9 @@ void azimuth_convert_to_pulses(char* client_message){
 
 void azimuth_drive(long length_pulses, long angle_pulses){
 	int position = 0;
+	int l_engine_spd = 0;
+	int r_engine_spd = 0;
+	kh4_get_speed(&l_engine_spd, &r_engine_spd, dsPic);
 	printf("Azimuth drive len: %d angl: %d\n", length_pulses, angle_pulses);
 	kh4_ResetEncoders(dsPic);
 	kh4_SetMode(kh4RegPosition, dsPic);
@@ -322,9 +344,20 @@ void azimuth_drive(long length_pulses, long angle_pulses){
 		printf("Position: %d\n", position);
 		usleep(100000);
 	}while((abs(angle_pulses) - abs(position)) > 5);
-	//usleep(200);
+
 	kh4_ResetEncoders(dsPic);
 	kh4_set_position(length_pulses, length_pulses, dsPic);
+
+	do
+		{
+			kh4_get_position(&position, &position, dsPic);
+			printf("Position: %d\n", position);
+			usleep(100000);
+		}while((abs(length_pulses) - abs(position)) > 5);
+
+	//kh4_SetSpeedProfile(3, 0, 20, 1, 400, dsPic);
+	kh4_SetMode(kh4RegSpeedProfile, dsPic);
+	kh4_set_speed(l_engine_spd, r_engine_spd, dsPic);
 }
 
 void turn_off(){
@@ -333,5 +366,5 @@ void turn_off(){
 	kh4_SetRGBLeds(0, 0, 0, 0, 0, 0, 0, 0, 0, dsPic);	//all LED off
 	kb_change_term_mode(0);		//revert to original terminal if called
 	system("kill $(pidof mjpg_streamer)");		//turn camera off
-	printf("\nAll turned off\n");
+	printf("\nAll turned off.\nEngines in idle mode.\n");
 }

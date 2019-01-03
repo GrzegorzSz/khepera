@@ -36,7 +36,7 @@ int main(int argc , char *argv[])
     }
     printf("Socket created %d", sock);
 
-    server.sin_addr.s_addr = inet_addr("192.168.1.28");
+    server.sin_addr.s_addr = inet_addr("192.168.1.24");
     server.sin_family = AF_INET;
     server.sin_port = htons( 8888 );
 
@@ -85,7 +85,7 @@ int main(int argc , char *argv[])
         	}
         }
 
-        if(c == 'a' || c=='A'){
+        if(c == 'a'){
         	memset(&azimuth, 0, 10 * sizeof(char));
         	printf("odległość ; kąt: ");
         	scanf("%s", newSpeed);
@@ -97,11 +97,29 @@ int main(int argc , char *argv[])
         	}
         }
 
+        if(c == 'p'){
+                	memset(&azimuth, 0, 10 * sizeof(char));
+                	printf("odległość ; kąt: ");
+                	scanf("%s", newSpeed);
+                	message[0] = 'p';
+                	chr1 = &message[1];
+                	chr2 = &newSpeed[0];
+                	while (*chr1++ = *chr2++){
+                		;
+                	}
+                }
+
         //Send some data
         if( send(sock , message , strlen(message)+1 , 0) < 0)
         {
             puts("Send failed");
             return 1;
+        }
+        if(message[0] == 'p'){
+        	while(recv(sock , server_reply , 2000 , 0) == -1){
+        		;
+        	}
+        	printf("Remote Server reply: [%s]\n", server_reply);
         }
 
         //Receive a reply from the server
