@@ -10,7 +10,7 @@
 #define STOP_TIME 100000 // us
 #define DETECTION_THRESHOLD 40
 #define PULSES_PER_MM 147.4
-#define PULSES_PER_ONE_DEGREE 139
+#define PULSES_PER_ONE_DEGREE 130
 
 #define SIGN(x) ((x)>0?1:((x)<0?-1:0))  // sign or zero
 
@@ -116,10 +116,12 @@ int drive_robot(int* read_size, int* client_sock, char* client_message, int sock
 			azimuth_convert_to_pulses(client_message);
 			break;
 		case 'r':
-			void circle_path_drive(client_message);
+			printf("round path choosen\n");
+			circle_path_drive(client_message);
+			send(*client_sock, travelCompletedMsg, strlen(travelCompletedMsg)+1, 0);
 			break;
 		case 'p':
-			printf("path drive choosen");
+			printf("path drive choosen\n");
 			azimuth_convert_to_pulses(client_message);
 			send(*client_sock, travelCompletedMsg, strlen(travelCompletedMsg)+1, 0);
 			break;
@@ -271,10 +273,38 @@ int main(int argc , char *argv[])
     return 0;
 }
 
-void circle_path_drive(char* client_message){
-	char* p_message = &client_message[1];
-	double radius = atof(*p_message);
-	double wheel_rad = radius + 52.35;
+void circle_path_drive(char* client_msg){
+	char* p_msg = &client_msg[1];
+	double radius = atof(p_msg) * 1.0;
+	double wheel1_rad = radius + 52.35;
+	double wheel2_rad = radius - 52.35;
+	double path_length_mm = 3.1416 * 2.0 * wheel1_rad;
+	int path_length_pulses = (int)(path_length_mm * PULSES_PER_MM);
+	int l_engine_spd = DEFAULT_SPEED;
+	int r_engine_spd = DEFAULT_SPEED;
+	int l_engine_pos = 0;
+	int r_engine_pos = 0;
+
+	FILE *file;
+	file = fopen("position.txt", "w");
+	if(file == NULL){
+		printf("problem z plikiem\n");
+	}
+
+	//-----calculating speed difference
+	double ratio = ((l_engine_spd * wheel2_rad) + (l_engine_spd * 104.7)) / (l_engine_spd * wheel2_rad);
+	int new_r_engine_spd = (int)(ratio * l_engine_spd);
+	kh4_ResetEncoders(dsPic);
+	kh4_set_speed(l_engine_spd, new_r_engine_spd, dsPic);
+
+	do{
+		kh4_get_position(&l_engine_pos, &r_engine_pos, dsPic);
+		fprintf(file, "%d;%d\n", l_engine_pos, r_engine_pos);
+		usleep(500);
+	}while(r_engine_pos < path_length_pulses);
+
+	kh4_set_speed(0, 0, dsPic);
+	fclose(file);
 }
 
 void azimuth_convert_to_pulses(char* client_message){
@@ -342,7 +372,7 @@ void azimuth_drive(long length_pulses, long angle_pulses){
 	{
 		kh4_get_position(&position, &position, dsPic);
 		printf("Position: %d\n", position);
-		usleep(100000);
+		usleep(10000);
 	}while((abs(angle_pulses) - abs(position)) > 5);
 
 	kh4_ResetEncoders(dsPic);

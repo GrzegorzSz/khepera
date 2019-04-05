@@ -36,7 +36,7 @@ int main(int argc , char *argv[])
     }
     printf("Socket created %d", sock);
 
-    server.sin_addr.s_addr = inet_addr("192.168.1.24");
+    server.sin_addr.s_addr = inet_addr("192.168.1.28");
     server.sin_family = AF_INET;
     server.sin_port = htons( 8888 );
 
@@ -97,11 +97,11 @@ int main(int argc , char *argv[])
         	}
         }
 
-        if(c == 'p'){
+        if((c == 'p') || (c == 'r')){
                 	memset(&azimuth, 0, 10 * sizeof(char));
                 	printf("odległość ; kąt: ");
                 	scanf("%s", newSpeed);
-                	message[0] = 'p';
+                	message[0] = c;
                 	chr1 = &message[1];
                 	chr2 = &newSpeed[0];
                 	while (*chr1++ = *chr2++){
@@ -115,7 +115,7 @@ int main(int argc , char *argv[])
             puts("Send failed");
             return 1;
         }
-        if(message[0] == 'p'){
+        if((message[0] == 'p') || (message[0] == 'r')){
         	while(recv(sock , server_reply , 2000 , 0) == -1){
         		;
         	}
